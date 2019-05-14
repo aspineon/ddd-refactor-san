@@ -1,32 +1,16 @@
 package services.impl;
 
-import dao.DemandDao;
-import dao.ShortageDao;
-import entities.DemandEntity;
-import entities.ShortageEntity;
-import enums.DeliverySchema;
-import external.CurrentStock;
-import external.StockService;
-import shortages.ProductionOutput;
-import shortages.ProductionRepository;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
-import tools.Util;
+import shortages.Shortage;
+import shortages.ShortagePredictionAlgorithm;
+import shortages.ShortagePredictionAlgorithmRepository;
+import shortages.ShortageRepository;
 
 import java.time.LocalDate;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Stream;
-
-import static java.util.stream.Collectors.toList;
 
 public class ShortageService {
 
-    private DemandDao demandDao;
-    private ShortageDao shortageDao;
-    private StockService stockService;
-    private ProductionRepository repository;
+    ShortagePredictionAlgorithmRepository repository;
+    private ShortageRepository shortageRepository;
 
     /**
      * Production at day of expected delivery is quite complex:
@@ -48,59 +32,12 @@ public class ShortageService {
      * <p>
      * TODO algorithm is finding wrong shortages, when more productions is planned in a single day
      */
-    public List<ShortageEntity> findShortages(String productRefNo, LocalDate today, int daysAhead) {
+    public Shortage findShortages(String productRefNo, LocalDate today, int daysAhead) {
+        ShortagePredictionAlgorithm algorithm = repository.get(productRefNo, today, daysAhead);
+        Shortage shortage = algorithm.findShortages();
+        shortageRepository.save(shortage);
 
-        List<LocalDate> dates = Stream.iterate(today, date -> date.plusDays(1))
-                .limit(daysAhead)
-                .collect(toList());
-
-        ProductionOutput outputs = repository.get(productRefNo, today);
-
-        List<DemandEntity> demands = demandDao.findFrom(today.atStartOfDay(), productRefNo);
-        Map<LocalDate, DemandEntity> demandsPerDay = new HashMap<>();
-        for (DemandEntity demand1 : demands) {
-            demandsPerDay.put(demand1.getDay(), demand1);
-        }
-        CurrentStock stock = stockService.getCurrentStock(productRefNo);
-        long level = stock.getLevel();
-
-        List<ShortageEntity> shortages = new LinkedList<>();
-        for (LocalDate day : dates) {
-            DemandEntity demand = demandsPerDay.get(day);
-            if (demand == null) {
-                level += outputs.getOutput(day);
-                continue;
-            }
-            long produced = outputs.getOutput(day);
-
-            long levelOnDelivery;
-            if (Util.getDeliverySchema(demand) == DeliverySchema.atDayStart) {
-                levelOnDelivery = level - Util.getLevel(demand);
-            } else if (Util.getDeliverySchema(demand) == DeliverySchema.tillEndOfDay) {
-                levelOnDelivery = level - Util.getLevel(demand) + produced;
-            } else if (Util.getDeliverySchema(demand) == DeliverySchema.every3hours) {
-                // TODO WTF ?? we need to rewrite that app :/
-                throw new NotImplementedException();
-            } else {
-                // TODO implement other variants
-                throw new NotImplementedException();
-            }
-
-            if (!(levelOnDelivery >= 0)) {
-                ShortageEntity entity = new ShortageEntity();
-                entity.setRefNo(productRefNo);
-                entity.setFound(LocalDate.now());
-                entity.setMissing(levelOnDelivery * -1L);
-                entity.setAtDay(day);
-                shortages.add(entity);
-            }
-            long endOfDayLevel = level + produced - Util.getLevel(demand);
-            level = endOfDayLevel >= 0 ? endOfDayLevel : 0;
-        }
-        shortageDao.delete(productRefNo);
-        shortageDao.saveAll(shortages);
-
-        return shortages;
+        return shortage;
     }
 
     private ShortageService() {
