@@ -1,14 +1,14 @@
 package services.impl;
 
 import dao.DemandDao;
-import dao.ProductionDao;
 import dao.ShortageDao;
 import entities.DemandEntity;
-import entities.ProductionEntity;
 import entities.ShortageEntity;
 import enums.DeliverySchema;
 import external.CurrentStock;
 import external.StockService;
+import shortages.ProductionOutput;
+import shortages.ProductionRepository;
 import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 import tools.Util;
 
@@ -26,7 +26,7 @@ public class ShortageService {
     private DemandDao demandDao;
     private ShortageDao shortageDao;
     private StockService stockService;
-    private ProductionDao productionDao;
+    private ProductionRepository repository;
 
     /**
      * Production at day of expected delivery is quite complex:
@@ -54,11 +54,8 @@ public class ShortageService {
                 .limit(daysAhead)
                 .collect(toList());
 
-        List<ProductionEntity> productions = productionDao.findFromTime(productRefNo, today.atStartOfDay());
-        Map<LocalDate, ProductionEntity> outputs = new HashMap<>();
-        for (ProductionEntity production : productions) {
-            outputs.put(production.getStart().toLocalDate(), production);
-        }
+        ProductionOutput outputs = repository.get(productRefNo, today);
+
         List<DemandEntity> demands = demandDao.findFrom(today.atStartOfDay(), productRefNo);
         Map<LocalDate, DemandEntity> demandsPerDay = new HashMap<>();
         for (DemandEntity demand1 : demands) {
@@ -71,17 +68,10 @@ public class ShortageService {
         for (LocalDate day : dates) {
             DemandEntity demand = demandsPerDay.get(day);
             if (demand == null) {
-                ProductionEntity production = outputs.get(day);
-                if (production != null) {
-                    level += production.getOutput();
-                }
+                level += outputs.getOutput(day);
                 continue;
             }
-            long produced = 0;
-            ProductionEntity production = outputs.get(day);
-            if (production != null) {
-                produced = production.getOutput();
-            }
+            long produced = outputs.getOutput(day);
 
             long levelOnDelivery;
             if (Util.getDeliverySchema(demand) == DeliverySchema.atDayStart) {
@@ -115,4 +105,5 @@ public class ShortageService {
 
     private ShortageService() {
     }
+
 }
