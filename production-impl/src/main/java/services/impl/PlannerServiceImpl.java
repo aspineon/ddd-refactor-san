@@ -253,7 +253,7 @@ public class PlannerServiceImpl implements PlannerService {
                                 .isBefore(today.plusDays(confIncreaseQATaskPriorityInDays))) {
                     jiraService.increasePriorityFor(production.getForm().getRefNo());
                 }
-                shortageDao.save(shortages);
+                shortageDao.saveAll(shortages);
             }
             if (shortages.isEmpty() && !previous.isEmpty()) {
                 shortageDao.delete(production.getForm().getRefNo());

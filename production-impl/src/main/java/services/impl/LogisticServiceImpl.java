@@ -115,7 +115,7 @@ public class LogisticServiceImpl implements LogisticService {
                             .isBefore(today.plusDays(confIncreaseQATaskPriorityInDays))) {
                 jiraService.increasePriorityFor(productRefNo);
             }
-            shortageDao.save(shortages);
+            shortageDao.saveAll(shortages);
         }
         if (shortages.isEmpty() && !previous.isEmpty()) {
             shortageDao.delete(productRefNo);
